@@ -249,37 +249,65 @@
 
             try {
                 // Geocode location
+                document.getElementById('loadingText').textContent = 'Finding location...';
                 const geoResponse = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&key=${apiKey}`);
                 const geoData = await geoResponse.json();
                 
+                console.log('Geocode response:', geoData);
+                
+                if (geoData.status === 'REQUEST_DENIED') {
+                    throw new Error('API key error: Make sure Geocoding API is enabled in Google Cloud Console');
+                }
+                
+                if (geoData.status === 'ZERO_RESULTS') {
+                    throw new Error(`Could not find location: "${location}". Try "City, State" format like "Boston, MA"`);
+                }
+                
                 if (geoData.status !== 'OK') {
-                    throw new Error('Location not found');
+                    throw new Error(`Geocoding error: ${geoData.status} - ${geoData.error_message || ''}`);
                 }
 
                 const { lat, lng } = geoData.results[0].geometry.location;
 
                 // Search for businesses
+                document.getElementById('loadingText').textContent = 'Searching businesses...';
                 const placeResponse = await fetch(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&type=${type}&key=${apiKey}`);
                 const placeData = await placeResponse.json();
 
+                console.log('Places response:', placeData);
+
+                if (placeData.status === 'REQUEST_DENIED') {
+                    throw new Error('API key error: Make sure Places API is enabled in Google Cloud Console');
+                }
+
                 if (placeData.status !== 'OK') {
-                    throw new Error(placeData.error_message || 'Search failed');
+                    throw new Error(`Places API error: ${placeData.status} - ${placeData.error_message || ''}`);
                 }
 
                 // Filter businesses without websites and get details
                 const businesses = [];
                 for (const place of placeData.results.slice(0, 20)) {
-                    document.getElementById('loadingText').textContent = `Analyzing ${place.name}...`;
+                    document.getElementById('loadingText').textContent = `Checking ${place.name}...`;
                     
-                    const detailsResponse = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_phone_number,website,url,rating,user_ratings_total,photos,formatted_address&key=${apiKey}`);
-                    const detailsData = await detailsResponse.json();
-                    
-                    if (detailsData.result && !detailsData.result.website) {
-                        businesses.push({
-                            ...detailsData.result,
-                            score: calculateScore(detailsData.result)
-                        });
+                    try {
+                        const detailsResponse = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_phone_number,website,url,rating,user_ratings_total,photos,formatted_address&key=${apiKey}`);
+                        const detailsData = await detailsResponse.json();
+                        
+                        if (detailsData.result && !detailsData.result.website) {
+                            businesses.push({
+                                ...detailsData.result,
+                                score: calculateScore(detailsData.result)
+                            });
+                        }
+                    } catch (e) {
+                        console.log('Error getting details for', place.name, e);
                     }
+                }
+
+                if (businesses.length === 0) {
+                    alert('No businesses without websites found in this area. Try a different location or business type.');
+                    document.getElementById('searchForm').classList.remove('hidden');
+                    return;
                 }
 
                 // Sort by score and take top 5
@@ -287,6 +315,7 @@
                 displayResults(businesses.slice(0, 5));
 
             } catch (error) {
+                console.error('Full error:', error);
                 alert('Error: ' + error.message);
                 document.getElementById('searchForm').classList.remove('hidden');
             } finally {
