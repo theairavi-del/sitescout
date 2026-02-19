@@ -95,6 +95,10 @@
                 class="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-semibold text-lg hover:opacity-90 transition">
                 Find Businesses
             </button>
+            
+            <button onclick="resetApiKey()" class="w-full mt-4 py-3 text-slate-400 hover:text-white text-sm transition">
+                ← Change API Key
+            </button>
         </div>
 
         <!-- Loading State -->
@@ -219,6 +223,15 @@
                 document.getElementById('apiSetup').classList.add('hidden');
                 document.getElementById('searchForm').classList.remove('hidden');
             }
+        }
+
+        function resetApiKey() {
+            localStorage.removeItem('sitescout_api_key');
+            apiKey = '';
+            document.getElementById('apiSetup').classList.remove('hidden');
+            document.getElementById('searchForm').classList.add('hidden');
+            document.getElementById('results').classList.add('hidden');
+            document.getElementById('apiKey').value = '';
         }
 
         async function saveApiKey() {
