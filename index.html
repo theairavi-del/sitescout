@@ -257,7 +257,11 @@
                 document.getElementById('searchForm').classList.remove('hidden');
                 
             } catch (error) {
-                alert('Error testing API key: ' + error.message);
+                if (error.message.includes('Failed to fetch')) {
+                    alert('CORS Error: The browser blocked the API request.\n\nGo to Google Cloud Console → APIs & Services → Credentials → Click your API key → Under "Application restrictions" choose "IP addresses" and add "0.0.0.0/0" (allows all IPs)\n\nOR temporarily set to "None" for testing');
+                } else {
+                    alert('Error testing API key: ' + error.message);
+                }
             } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
@@ -347,7 +351,11 @@
 
             } catch (error) {
                 console.error('Full error:', error);
-                alert('Error: ' + error.message);
+                if (error.message.includes('Failed to fetch')) {
+                    alert('Network Error (CORS):\n\nThe browser blocked the request. This happens because:\n1. API key restrictions are too strict\n2. Network connectivity issue\n\nSOLUTION:\nGo to console.cloud.google.com/apis/credentials\nClick your API key\nUnder "Application restrictions" select "IP addresses"\nAdd your IP: 0.0.0.0/0 (allows all)\n\nOr try using "None" temporarily');
+                } else {
+                    alert('Error: ' + error.message);
+                }
                 document.getElementById('searchForm').classList.remove('hidden');
             } finally {
                 document.getElementById('loadingState').classList.add('hidden');
