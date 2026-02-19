@@ -100,6 +100,10 @@
                 Find Businesses
             </button>
 
+            <button onclick="testApiKey()" class="w-full mt-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium transition text-sm">
+                Test API Key
+            </button>
+            
             <button onclick="resetApiKey()" class="w-full mt-4 py-3 text-slate-400 hover:text-white text-sm transition">
                 ← Change API Key
             </button>
@@ -176,7 +180,8 @@
     <script>
         // Global error handler for Google Maps
         window.gm_authFailure = function() {
-            showError('Google Maps API Error: Invalid key or API not enabled.\n\nPlease check:\n1. Your API key is correct\n2. Geocoding API is enabled\n3. Places API is enabled\n4. No HTTP referrer restrictions blocking this site\n\nGo to: console.cloud.google.com/apis/credentials');
+            const debugInfo = `API Key: ${apiKey.substring(0, 10)}...\nKey Length: ${apiKey.length}\nTimestamp: ${new Date().toISOString()}`;
+            showError('Google Maps API Error: Invalid key or API not enabled.\n\nDEBUG INFO:\n' + debugInfo + '\n\nPlease check:\n1. Your API key is correct (starts with AIza...)\n2. Maps JavaScript API is enabled\n3. Geocoding API is enabled\n4. Places API is enabled\n5. Billing is enabled on your Google Cloud project\n6. Application restrictions are set to "None" or include this website\n\nGo to: console.cloud.google.com/apis/credentials');
         };
         
         let apiKey = localStorage.getItem('sitescout_api_key') || '';
@@ -338,6 +343,59 @@
             document.getElementById('apiKey').value = '';
         }
 
+        function testApiKey() {
+            const testDiv = document.createElement('div');
+            testDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+            testDiv.innerHTML = `
+                <div style="background:#1e293b;padding:24px;border-radius:16px;max-width:500px;width:100%;border:1px solid #334155;">
+                    <h3 style="font-weight:600;margin-bottom:16px;">Testing API Key...</h3>
+                    <div id="testResults" style="font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:300px;overflow-y:auto;background:#0f172a;padding:12px;border-radius:8px;"></div>
+                    <button onclick="this.closest('div').parentElement.remove()" style="margin-top:16px;width:100%;padding:12px;background:#3b82f6;border-radius:8px;font-weight:500;">Close</button>
+                </div>
+            `;
+            document.body.appendChild(testDiv);
+            
+            const results = document.getElementById('testResults');
+            results.textContent = 'API Key: ' + apiKey.substring(0, 15) + '...\n\n';
+            
+            // Test 1: Check if key exists
+            if (!apiKey) {
+                results.textContent += '❌ No API key found\n';
+                return;
+            }
+            results.textContent += '✓ API key found\n';
+            
+            // Test 2: Try loading Google Maps
+            results.textContent += '\nTrying to load Google Maps...\n';
+            
+            const testScript = document.createElement('script');
+            testScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=testGoogleMapsCallback`;
+            
+            window.testGoogleMapsCallback = function() {
+                results.textContent += '✓ Google Maps loaded successfully!\n';
+                results.textContent += '\nAPIs appear to be working.\n';
+                results.textContent += 'Try searching now!';
+            };
+            
+            testScript.onerror = function() {
+                results.textContent += '❌ Failed to load Google Maps\n';
+                results.textContent += '\nPossible issues:\n';
+                results.textContent += '- API key is invalid\n';
+                results.textContent += '- Maps JavaScript API not enabled\n';
+                results.textContent += '- Billing not enabled\n';
+                results.textContent += '- Domain restrictions blocking the request\n';
+            };
+            
+            // Set a timeout
+            setTimeout(() => {
+                if (!window.google || !window.google.maps) {
+                    results.textContent += '❌ Timeout - Google Maps did not load within 10 seconds\n';
+                }
+            }, 10000);
+            
+            document.head.appendChild(testScript);
+        }
+        
         async function saveApiKey() {
             const key = document.getElementById('apiKey').value.trim();
             if (!key.startsWith('AIza')) {
