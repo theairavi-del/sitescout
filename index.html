@@ -520,7 +520,7 @@
                 }
 
                 if (businesses.length === 0) {
-                    showError('No businesses without websites found in this area. Try a different location or business type.');
+                    showError(`No businesses without websites found.\n\nChecked ${placeResults.length} businesses in your area.\nAll of them already have websites!\n\nTry:\n• Different business type (e.g., try "contractor" instead of "restaurant")\n• Larger search radius\n• Different location (rural areas often have fewer websites)`);
                     document.getElementById('searchForm').classList.remove('hidden');
                     return;
                 }
