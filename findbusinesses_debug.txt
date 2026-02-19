@@ -1,0 +1,1 @@
+The findBusinesses function needs debugging. Add console.log statements at each step to see where it fails.
