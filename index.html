@@ -174,6 +174,11 @@
     </div>
 
     <script>
+        // Global error handler for Google Maps
+        window.gm_authFailure = function() {
+            showError('Google Maps API Error: Invalid key or API not enabled.\n\nPlease check:\n1. Your API key is correct\n2. Geocoding API is enabled\n3. Places API is enabled\n4. No HTTP referrer restrictions blocking this site\n\nGo to: console.cloud.google.com/apis/credentials');
+        };
+        
         let apiKey = localStorage.getItem('sitescout_api_key') || '';
         let currentBusiness = null;
         let generatedMockup = null;
@@ -185,6 +190,13 @@
         function loadGoogleMaps() {
             return new Promise((resolve, reject) => {
                 if (window.google && window.google.maps) {
+                    console.log('Google Maps already loaded');
+                    geocoder = new google.maps.Geocoder();
+                    const mapDiv = document.createElement('div');
+                    mapDiv.style.display = 'none';
+                    document.body.appendChild(mapDiv);
+                    const map = new google.maps.Map(mapDiv);
+                    placesService = new google.maps.places.PlacesService(map);
                     resolve();
                     return;
                 }
@@ -193,10 +205,16 @@
                 script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMaps`;
                 script.async = true;
                 script.defer = true;
+                
+                // Timeout if it takes too long
+                const timeout = setTimeout(() => {
+                    reject(new Error('Google Maps API loading timeout (30s). Check if your API key is valid and APIs are enabled.'));
+                }, 30000);
 
                 window.initGoogleMaps = () => {
+                    clearTimeout(timeout);
+                    console.log('Google Maps loaded successfully');
                     geocoder = new google.maps.Geocoder();
-                    // Create a dummy map element for PlacesService
                     const mapDiv = document.createElement('div');
                     mapDiv.style.display = 'none';
                     document.body.appendChild(mapDiv);
@@ -205,7 +223,12 @@
                     resolve();
                 };
 
-                script.onerror = () => reject(new Error('Failed to load Google Maps API'));
+                script.onerror = (err) => {
+                    clearTimeout(timeout);
+                    console.error('Script load error:', err);
+                    reject(new Error('Failed to load Google Maps API. Check console for details.'));
+                };
+                
                 document.head.appendChild(script);
             });
         }
