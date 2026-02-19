@@ -28,6 +28,10 @@
             animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
         }
         .score-ring { stroke-dasharray: 100; stroke-dashoffset: 100; transition: stroke-dashoffset 1s ease; }
+        .error-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .error-modal.hidden { display: none; }
+        .error-content { background: #1e293b; border: 1px solid #334155; border-radius: 16px; max-width: 500px; width: 100%; max-height: 80vh; overflow-y: auto; }
+        .error-text { white-space: pre-wrap; font-family: monospace; font-size: 13px; line-height: 1.5; }
     </style>
 </head>
 <body class="min-h-screen">
@@ -147,12 +151,53 @@
             </div>
         </div>
 
+        <!-- Error Modal (Copy-able) -->
+        <div id="errorModal" class="error-modal hidden">
+            <div class="error-content">
+                <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+                    <h3 class="font-semibold text-red-400">Error</h3>
+                    <button onclick="closeErrorModal()" class="text-slate-400 hover:text-white">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-4">
+                    <pre id="errorText" class="error-text text-slate-300 bg-slate-900 p-4 rounded-lg overflow-x-auto select-all"></pre>
+                    <button onclick="copyErrorText()" class="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-medium transition">
+                        Copy Error Message
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
         let apiKey = localStorage.getItem('sitescout_api_key') || '';
         let currentBusiness = null;
         let generatedMockup = null;
+        let currentErrorText = '';
+
+        // Show error in copy-able modal
+        function showError(message) {
+            currentErrorText = message;
+            document.getElementById('errorText').textContent = message;
+            document.getElementById('errorModal').classList.remove('hidden');
+        }
+
+        function closeErrorModal() {
+            document.getElementById('errorModal').classList.add('hidden');
+        }
+
+        function copyErrorText() {
+            navigator.clipboard.writeText(currentErrorText).then(() => {
+                const btn = event.target;
+                const original = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = original, 1500);
+            });
+        }
 
         // Templates for different business types
         const templates = {
@@ -237,7 +282,7 @@
         async function saveApiKey() {
             const key = document.getElementById('apiKey').value.trim();
             if (!key.startsWith('AIza')) {
-                alert('Please enter a valid Google API key (starts with AIza...)');
+                showError('Please enter a valid Google API key (starts with AIza...)');
                 return;
             }
             
@@ -254,12 +299,12 @@
                 console.log('API test:', data);
                 
                 if (data.status === 'REQUEST_DENIED') {
-                    alert('API Key Error!\n\nYour key is being rejected. Most likely causes:\n\n1. HTTP Referrer restrictions - Remove them in Google Cloud Console\n2. API not enabled - Enable Geocoding API AND Places API\n3. Wrong API key - Make sure you copied the full key\n\nGo to: console.cloud.google.com/apis/credentials\nClick your API key → Set "Application restrictions" to "None"\n→ Make sure Geocoding API and Places API are enabled');
+                    showError('API Key Error!\n\nYour key is being rejected. Most likely causes:\n\n1. HTTP Referrer restrictions - Remove them in Google Cloud Console\n2. API not enabled - Enable Geocoding API AND Places API\n3. Wrong API key - Make sure you copied the full key\n\nGo to: console.cloud.google.com/apis/credentials\nClick your API key → Set "Application restrictions" to "None"\n→ Make sure Geocoding API and Places API are enabled');
                     return;
                 }
                 
                 if (data.status === 'OVER_QUERY_LIMIT') {
-                    alert('API quota exceeded. You may need to enable billing (you get $200/month free)');
+                    showError('API quota exceeded. You may need to enable billing (you get $200/month free)');
                     return;
                 }
                 
@@ -271,9 +316,9 @@
                 
             } catch (error) {
                 if (error.message.includes('Failed to fetch')) {
-                    alert('CORS Error: The browser blocked the API request.\n\nGo to Google Cloud Console → APIs & Services → Credentials → Click your API key → Under "Application restrictions" choose "IP addresses" and add "0.0.0.0/0" (allows all IPs)\n\nOR temporarily set to "None" for testing');
+                    showError('CORS Error: The browser blocked the API request.\n\nGo to Google Cloud Console → APIs & Services → Credentials → Click your API key → Under "Application restrictions" choose "IP addresses" and add "0.0.0.0/0" (allows all IPs)\n\nOR temporarily set to "None" for testing');
                 } else {
-                    alert('Error testing API key: ' + error.message);
+                    showError('Error testing API key: ' + error.message);
                 }
             } finally {
                 btn.textContent = originalText;
@@ -287,7 +332,7 @@
             const radius = document.getElementById('radius').value;
 
             if (!location) {
-                alert('Please enter a location');
+                showError('Please enter a location');
                 return;
             }
 
@@ -353,7 +398,7 @@
                 }
 
                 if (businesses.length === 0) {
-                    alert('No businesses without websites found in this area. Try a different location or business type.');
+                    showError('No businesses without websites found in this area. Try a different location or business type.');
                     document.getElementById('searchForm').classList.remove('hidden');
                     return;
                 }
@@ -365,9 +410,9 @@
             } catch (error) {
                 console.error('Full error:', error);
                 if (error.message.includes('Failed to fetch')) {
-                    alert('Network Error (CORS):\n\nThe browser blocked the request. This happens because:\n1. API key restrictions are too strict\n2. Network connectivity issue\n\nSOLUTION:\nGo to console.cloud.google.com/apis/credentials\nClick your API key\nUnder "Application restrictions" select "IP addresses"\nAdd your IP: 0.0.0.0/0 (allows all)\n\nOr try using "None" temporarily');
+                    showError('Network Error (CORS):\n\nThe browser blocked the request. This happens because:\n1. API key restrictions are too strict\n2. Network connectivity issue\n\nSOLUTION:\nGo to console.cloud.google.com/apis/credentials\nClick your API key\nUnder "Application restrictions" select "IP addresses"\nAdd your IP: 0.0.0.0/0 (allows all)\n\nOr try using "None" temporarily');
                 } else {
-                    alert('Error: ' + error.message);
+                    showError('Error: ' + error.message);
                 }
                 document.getElementById('searchForm').classList.remove('hidden');
             } finally {
@@ -502,7 +547,7 @@
 
         function downloadMockup() {
             // Use html2canvas or similar in production
-            alert('Screenshot feature - integrate html2canvas library');
+            showError('Screenshot feature - integrate html2canvas library');
         }
 
         function copyEmail() {
@@ -529,7 +574,7 @@ Best,
 P.S. Your ${biz.rating || 'great'} reviews on Google show you run a quality business - a website would just help more people find you!`;
 
             navigator.clipboard.writeText(email).then(() => {
-                alert('Email copied to clipboard!');
+                showError('Email copied to clipboard!');
             });
         }
 
