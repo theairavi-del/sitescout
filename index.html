@@ -36,7 +36,7 @@
 </head>
 <body class="min-h-screen">
     <div class="max-w-6xl mx-auto px-6 py-12">
-        
+
         <!-- Header -->
         <header class="text-center mb-12">
             <h1 class="font-display text-5xl font-bold mb-4">
@@ -54,7 +54,7 @@
                 Get your free API key at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="text-blue-400 hover:underline">Google Cloud Console</a>
             </p>
             <div class="flex gap-3">
-                <input type="password" id="apiKey" placeholder="AIzaSy..." 
+                <input type="password" id="apiKey" placeholder="AIzaSy..."
                     class="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:border-blue-500">
                 <button onclick="saveApiKey()" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl font-medium transition">
                     Save
@@ -67,7 +67,7 @@
             <div class="grid md:grid-cols-3 gap-4 mb-6">
                 <div>
                     <label class="block text-sm font-medium text-slate-400 mb-2">Location (City, State or ZIP)</label>
-                    <input type="text" id="location" placeholder="Boston, MA or 02101" 
+                    <input type="text" id="location" placeholder="Boston, MA or 02101"
                         class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl focus:outline-none focus:border-blue-500">
                 </div>
                 <div>
@@ -95,11 +95,11 @@
                     </select>
                 </div>
             </div>
-            <button onclick="findBusinesses()" id="searchBtn" 
+            <button onclick="findBusinesses()" id="searchBtn"
                 class="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-semibold text-lg hover:opacity-90 transition">
                 Find Businesses
             </button>
-            
+
             <button onclick="resetApiKey()" class="w-full mt-4 py-3 text-slate-400 hover:text-white text-sm transition">
                 ← Change API Key
             </button>
@@ -120,7 +120,7 @@
                 <h2 class="text-2xl font-bold">Top Prospects</h2>
                 <span id="resultCount" class="text-slate-400"></span>
             </div>
-            
+
             <div id="businessList" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <!-- Business cards injected here -->
             </div>
@@ -178,6 +178,37 @@
         let currentBusiness = null;
         let generatedMockup = null;
         let currentErrorText = '';
+        let placesService = null;
+        let geocoder = null;
+
+        // Load Google Maps API
+        function loadGoogleMaps() {
+            return new Promise((resolve, reject) => {
+                if (window.google && window.google.maps) {
+                    resolve();
+                    return;
+                }
+
+                const script = document.createElement('script');
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMaps`;
+                script.async = true;
+                script.defer = true;
+
+                window.initGoogleMaps = () => {
+                    geocoder = new google.maps.Geocoder();
+                    // Create a dummy map element for PlacesService
+                    const mapDiv = document.createElement('div');
+                    mapDiv.style.display = 'none';
+                    document.body.appendChild(mapDiv);
+                    const map = new google.maps.Map(mapDiv);
+                    placesService = new google.maps.places.PlacesService(map);
+                    resolve();
+                };
+
+                script.onerror = () => reject(new Error('Failed to load Google Maps API'));
+                document.head.appendChild(script);
+            });
+        }
 
         // Show error in copy-able modal
         function showError(message) {
@@ -265,8 +296,13 @@
 
         function init() {
             if (apiKey) {
-                document.getElementById('apiSetup').classList.add('hidden');
-                document.getElementById('searchForm').classList.remove('hidden');
+                loadGoogleMaps().then(() => {
+                    document.getElementById('apiSetup').classList.add('hidden');
+                    document.getElementById('searchForm').classList.remove('hidden');
+                }).catch(err => {
+                    console.error('Failed to load Google Maps:', err);
+                    showError('Failed to load Google Maps API. Please check your API key.');
+                });
             }
         }
 
@@ -286,40 +322,24 @@
                 return;
             }
             
-            // Test the API key
             const btn = event.target;
             const originalText = btn.textContent;
-            btn.textContent = 'Testing...';
+            btn.textContent = 'Loading...';
             btn.disabled = true;
             
             try {
-                const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=Boston,MA&key=${key}`);
-                const data = await response.json();
-                
-                console.log('API test:', data);
-                
-                if (data.status === 'REQUEST_DENIED') {
-                    showError('API Key Error!\n\nYour key is being rejected. Most likely causes:\n\n1. HTTP Referrer restrictions - Remove them in Google Cloud Console\n2. API not enabled - Enable Geocoding API AND Places API\n3. Wrong API key - Make sure you copied the full key\n\nGo to: console.cloud.google.com/apis/credentials\nClick your API key → Set "Application restrictions" to "None"\n→ Make sure Geocoding API and Places API are enabled');
-                    return;
-                }
-                
-                if (data.status === 'OVER_QUERY_LIMIT') {
-                    showError('API quota exceeded. You may need to enable billing (you get $200/month free)');
-                    return;
-                }
-                
-                // Success!
+                // Try loading Google Maps API
                 apiKey = key;
+                await loadGoogleMaps();
+                
                 localStorage.setItem('sitescout_api_key', apiKey);
                 document.getElementById('apiSetup').classList.add('hidden');
                 document.getElementById('searchForm').classList.remove('hidden');
                 
             } catch (error) {
-                if (error.message.includes('Failed to fetch')) {
-                    showError('CORS Error: The browser blocked the API request.\n\nGo to Google Cloud Console → APIs & Services → Credentials → Click your API key → Under "Application restrictions" choose "IP addresses" and add "0.0.0.0/0" (allows all IPs)\n\nOR temporarily set to "None" for testing');
-                } else {
-                    showError('Error testing API key: ' + error.message);
-                }
+                console.error('Failed to load Google Maps:', error);
+                showError('Failed to load Google Maps API. Please check:\n1. Your API key is correct\n2. Geocoding API is enabled\n3. Places API is enabled\n4. No strict referrer restrictions\n\nGo to console.cloud.google.com/apis/credentials');
+                apiKey = '';
             } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
@@ -329,10 +349,15 @@
         async function findBusinesses() {
             const location = document.getElementById('location').value;
             const type = document.getElementById('businessType').value;
-            const radius = document.getElementById('radius').value;
+            const radius = parseInt(document.getElementById('radius').value);
 
             if (!location) {
                 showError('Please enter a location');
+                return;
+            }
+
+            if (!geocoder || !placesService) {
+                showError('Google Maps not loaded. Please refresh and try again.');
                 return;
             }
 
@@ -341,55 +366,71 @@
             document.getElementById('results').classList.add('hidden');
 
             try {
-                // Geocode location
+                // Geocode location using Google Maps API
                 document.getElementById('loadingText').textContent = 'Finding location...';
-                const geoResponse = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&key=${apiKey}`);
-                const geoData = await geoResponse.json();
-                
-                console.log('Geocode response:', geoData);
-                
-                if (geoData.status === 'REQUEST_DENIED') {
-                    throw new Error('API key rejected. Go to console.cloud.google.com/apis/credentials → Click your key → Remove HTTP referrer restrictions OR add this website to allowed referrers');
-                }
-                
-                if (geoData.status === 'ZERO_RESULTS') {
-                    throw new Error(`Could not find location: "${location}". Try "City, State" format like "Boston, MA"`);
-                }
-                
-                if (geoData.status !== 'OK') {
-                    throw new Error(`Geocoding error: ${geoData.status} - ${geoData.error_message || ''}`);
-                }
 
-                const { lat, lng } = geoData.results[0].geometry.location;
+                const geoResult = await new Promise((resolve, reject) => {
+                    geocoder.geocode({ address: location }, (results, status) => {
+                        if (status === 'OK') {
+                            resolve(results[0].geometry.location);
+                        } else if (status === 'ZERO_RESULTS') {
+                            reject(new Error(`Could not find location: "${location}". Try "City, State" format like "Boston, MA"`));
+                        } else {
+                            reject(new Error(`Geocoding error: ${status}`));
+                        }
+                    });
+                });
 
-                // Search for businesses
+                const lat = geoResult.lat();
+                const lng = geoResult.lng();
+
+                // Search for businesses using Places API
                 document.getElementById('loadingText').textContent = 'Searching businesses...';
-                const placeResponse = await fetch(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&type=${type}&key=${apiKey}`);
-                const placeData = await placeResponse.json();
 
-                console.log('Places response:', placeData);
-
-                if (placeData.status === 'REQUEST_DENIED') {
-                    throw new Error('API key error: Make sure Places API is enabled in Google Cloud Console');
-                }
-
-                if (placeData.status !== 'OK') {
-                    throw new Error(`Places API error: ${placeData.status} - ${placeData.error_message || ''}`);
-                }
+                const placeResults = await new Promise((resolve, reject) => {
+                    placesService.nearbySearch({
+                        location: { lat, lng },
+                        radius: radius,
+                        type: type
+                    }, (results, status) => {
+                        if (status === google.maps.places.PlacesServiceStatus.OK) {
+                            resolve(results);
+                        } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+                            resolve([]);
+                        } else {
+                            reject(new Error(`Places API error: ${status}`));
+                        }
+                    });
+                });
 
                 // Filter businesses without websites and get details
                 const businesses = [];
-                for (const place of placeData.results.slice(0, 20)) {
+                for (const place of placeResults.slice(0, 20)) {
                     document.getElementById('loadingText').textContent = `Checking ${place.name}...`;
-                    
+
                     try {
-                        const detailsResponse = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=name,formatted_phone_number,website,url,rating,user_ratings_total,photos,formatted_address&key=${apiKey}`);
-                        const detailsData = await detailsResponse.json();
-                        
-                        if (detailsData.result && !detailsData.result.website) {
+                        const details = await new Promise((resolve) => {
+                            placesService.getDetails({
+                                placeId: place.place_id,
+                                fields: ['name', 'formatted_phone_number', 'website', 'url', 'rating', 'user_ratings_total', 'photos', 'formatted_address']
+                            }, (result, status) => {
+                                if (status === google.maps.places.PlacesServiceStatus.OK) {
+                                    resolve(result);
+                                } else {
+                                    resolve(null);
+                                }
+                            });
+                        });
+
+                        if (details && !details.website) {
                             businesses.push({
-                                ...detailsData.result,
-                                score: calculateScore(detailsData.result)
+                                name: details.name,
+                                formatted_address: details.formatted_address,
+                                formatted_phone_number: details.formatted_phone_number,
+                                rating: details.rating,
+                                user_ratings_total: details.user_ratings_total,
+                                photos: details.photos,
+                                score: calculateScore(details)
                             });
                         }
                     } catch (e) {
@@ -409,11 +450,7 @@
 
             } catch (error) {
                 console.error('Full error:', error);
-                if (error.message.includes('Failed to fetch')) {
-                    showError('Network Error (CORS):\n\nThe browser blocked the request. This happens because:\n1. API key restrictions are too strict\n2. Network connectivity issue\n\nSOLUTION:\nGo to console.cloud.google.com/apis/credentials\nClick your API key\nUnder "Application restrictions" select "IP addresses"\nAdd your IP: 0.0.0.0/0 (allows all)\n\nOr try using "None" temporarily');
-                } else {
-                    showError('Error: ' + error.message);
-                }
+                showError('Error: ' + error.message);
                 document.getElementById('searchForm').classList.remove('hidden');
             } finally {
                 document.getElementById('loadingState').classList.add('hidden');
@@ -422,39 +459,39 @@
 
         function calculateScore(business) {
             let score = 0;
-            
+
             // Rating (0-30 points)
             if (business.rating) {
                 score += business.rating * 6;
             }
-            
+
             // Review count (0-30 points)
             if (business.user_ratings_total) {
                 score += Math.min(business.user_ratings_total / 10, 30);
             }
-            
+
             // Has phone number (+10)
             if (business.formatted_phone_number) {
                 score += 10;
             }
-            
+
             // Has photos (+20)
             if (business.photos && business.photos.length > 0) {
                 score += 20;
             }
-            
+
             // Established businesses (more reviews = more established)
             if (business.user_ratings_total > 50) {
                 score += 10;
             }
-            
+
             return Math.min(Math.round(score), 100);
         }
 
         function displayResults(businesses) {
             document.getElementById('results').classList.remove('hidden');
             document.getElementById('resultCount').textContent = `${businesses.length} prospects found`;
-            
+
             const container = document.getElementById('businessList');
             container.innerHTML = businesses.map((biz, index) => `
                 <div class="business-card glass rounded-xl p-6 cursor-pointer" onclick="generateMockup(${index})">
@@ -466,28 +503,28 @@
                         <div class="relative w-14 h-14">
                             <svg class="w-14 h-14 transform -rotate-90">
                                 <circle cx="28" cy="28" r="24" stroke="#1e293b" stroke-width="4" fill="none"/>
-                                <circle cx="28" cy="28" r="24" stroke="${biz.score > 70 ? '#22c55e' : biz.score > 50 ? '#eab308' : '#ef4444'}" 
-                                    stroke-width="4" fill="none" 
-                                    stroke-dasharray="150.8" 
+                                <circle cx="28" cy="28" r="24" stroke="${biz.score > 70 ? '#22c55e' : biz.score > 50 ? '#eab308' : '#ef4444'}"
+                                    stroke-width="4" fill="none"
+                                    stroke-dasharray="150.8"
                                     stroke-dashoffset="${150.8 - (150.8 * biz.score / 100)}"
                                     class="score-ring"/>
                             </svg>
                             <span class="absolute inset-0 flex items-center justify-center text-sm font-bold">${biz.score}</span>
                         </div>
                     </div>
-                    
+
                     <div class="flex items-center gap-4 text-sm text-slate-400 mb-4">
                         ${biz.rating ? `<span>⭐ ${biz.rating}</span>` : ''}
                         ${biz.user_ratings_total ? `<span>(${biz.user_ratings_total} reviews)</span>` : ''}
                         ${biz.formatted_phone_number ? `<span>📞 ${biz.formatted_phone_number}</span>` : ''}
                     </div>
-                    
+
                     <button class="w-full py-3 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/50 rounded-xl text-blue-400 font-medium transition">
                         Generate Mockup & Email
                     </button>
                 </div>
             `).join('');
-            
+
             // Store businesses for later
             window.foundBusinesses = businesses;
         }
@@ -497,13 +534,13 @@
             currentBusiness = business;
             const type = document.getElementById('businessType').value;
             const template = templates[type] || templates.restaurant;
-            
+
             generatedMockup = {
                 business,
                 template,
                 type
             };
-            
+
             const preview = document.getElementById('mockupPreview');
             preview.innerHTML = `
                 <div style="background: linear-gradient(135deg, ${template.colors.primary}20 0%, ${template.colors.secondary}20 100%); padding: 40px; border-radius: 12px;">
@@ -516,7 +553,7 @@
                             <span>Contact</span>
                         </div>
                     </nav>
-                    
+
                     <div style="text-align: center; padding: 60px 20px;">
                         <h2 style="font-size: 48px; font-weight: bold; margin-bottom: 20px; color: white;">${template.headline}</h2>
                         <p style="font-size: 18px; color: #94a3b8; max-width: 600px; margin: 0 auto 30px;">
@@ -526,7 +563,7 @@
                             ${template.cta}
                         </button>
                     </div>
-                    
+
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 40px;">
                         ${template.features.map(f => `
                             <div style="background: rgba(255,255,255,0.05); padding: 24px; border-radius: 12px; text-align: center;">
@@ -537,7 +574,7 @@
                     </div>
                 </div>
             `;
-            
+
             document.getElementById('mockupModal').classList.remove('hidden');
         }
 
